@@ -48,7 +48,7 @@ A lightweight, browser-based application for viewing and interacting with common
 
 This is a single HTML file application with no build process required:
 
-1. **Download**: Get the `Geospatial_Data_Viewer.html` file
+1. **Download**: Get the `GeospatialDataViewer.html` file
 2. **Open**: Double-click to open in any modern browser, or host it on any web server
 
 ### Self-Hosting Options
@@ -111,3 +111,7 @@ SOFTWARE.
 
 - [OpenStreetMap](https://www.openstreetmap.org/) for the base map tiles
 - All the amazing open-source libraries that make this project possible
+
+## Developer
+
+[Created by Christopher Pickett - 2025]([https://www.linkedin.com/in/christopher-p-a4908979/])
