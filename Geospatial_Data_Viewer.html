@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="A static web application for viewing Shapefiles and KMZ/KML files using Leaflet.js">
+    <title>Geospatial Data Viewer</title>
+    
+    <!-- Favicon -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🗺️</text></svg>">
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+    
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            font-family: Arial, sans-serif;
+        }
+        
+        .container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+        
+        #header {
+            background-color: #3b5998;
+            color: white;
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        #content {
+            display: flex;
+            flex: 1;
+        }
+        
+        #sidebar {
+            width: 300px;
+            background-color: #f5f5f5;
+            padding: 15px;
+            overflow-y: auto;
+        }
+        
+        #map {
+            flex: 1;
+            min-height: 500px;
+        }
+        
+        .drop-area {
+            border: 2px dashed #ccc;
+            padding: 20px;
+            text-align: center;
+            margin-bottom: 20px;
+            background-color: #f9f9f9;
+            cursor: pointer;
+        }
+        
+        .drop-area.highlight {
+            border-color: #3b5998;
+            background-color: #eaeaea;
+        }
+        
+        button {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 8px 16px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 14px;
+            margin: 4px 2px;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: background-color 0.3s;
+        }
+        
+        button:hover {
+            background-color: #45a049;
+        }
+        
+        .file-input {
+            display: none;
+        }
+        
+        .layer-control {
+            margin-top: 15px;
+        }
+        
+        .layer-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px;
+            margin-bottom: 5px;
+            background-color: #fff;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        
+        .color-picker {
+            margin-left: 10px;
+        }
+        
+        .loading-indicator {
+            display: none;
+            text-align: center;
+            margin-top: 10px;
+        }
+
+        .legend {
+            background-color: white;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 0 5px rgba(0,0,0,0.2);
+        }
+        
+        #help-btn {
+            background-color: #3b5998;
+            border: 1px solid white;
+        }
+        
+        #help-modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.4);
+        }
+        
+        .modal-content {
+            background-color: #fefefe;
+            margin: 10% auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%;
+            max-width: 700px;
+            border-radius: 5px;
+        }
+        
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        
+        .close:hover {
+            color: black;
+        }
+        
+        .file-types {
+            margin: 15px 0;
+        }
+        
+        .file-types li {
+            margin-bottom: 8px;
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 15px;
+            font-size: 12px;
+            color: #777;
+            background-color: #f5f5f5;
+            border-top: 1px solid #ddd;
+        }
+        
+        .footer a {
+            color: #3b5998;
+            text-decoration: none;
+        }
+        
+        .footer a:hover {
+            text-decoration: underline;
+        }
+        
+        .credits {
+            margin-top: 8px;
+            font-size: 11px;
+        }
+        
+        @media (max-width: 768px) {
+            #content {
+                flex-direction: column;
+            }
+            
+            #sidebar {
+                width: 100%;
+                max-height: 300px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="header">
+            <h1>Geospatial Data Viewer</h1>
+            <div>
+                <button id="help-btn">Help</button>
+                <button id="export-btn">Export GeoJSON</button>
+            </div>
+        </div>
+        
+        <div id="content">
+            <div id="sidebar">
+                <div class="drop-area" id="drop-area">
+                    <p>Drag & Drop Shapefiles, KMZ, or GeoJSON files here</p>
+                    <p>or</p>
+                    <button id="file-select-btn">Select Files</button>
+                    <input type="file" id="file-input" class="file-input" multiple accept=".shp,.dbf,.prj,.zip,.kmz,.kml,.geojson,.json">
+                </div>
+                
+                <div class="loading-indicator" id="loading-indicator">
+                    <p>Processing file... Please wait.</p>
+                </div>
+                
+                <div class="layer-control">
+                    <h3>Layers</h3>
+                    <div id="layers-list"></div>
+                </div>
+            </div>
+            
+            <div id="map"></div>
+        </div>
+        
+        <div class="footer">
+            Geospatial File Viewer | A static web application for viewing Shapefiles, KMZ/KML, and GeoJSON files
+            <div class="credits">
+                <p>Created by <a href="https://www.linkedin.com/in/christopher-p-a4908979/" target="_blank" rel="noopener noreferrer">Christopher Pickett</a> | 2025 |
+                <a href="https://github.com/mapbox/leaflet-omnivore" target="_blank" rel="noopener noreferrer">GitHub</a></p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Help Modal -->
+    <div id="help-modal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>How to Use Geospatial File Viewer</h2>
+            
+            <h3>Supported File Types</h3>
+            <ul class="file-types">
+                <li><strong>Shapefiles</strong> (.shp, .dbf, .prj) - Upload all components together</li>
+                <li><strong>Zipped Shapefiles</strong> (.zip) - Contains all shapefile components</li>
+                <li><strong>KML files</strong> (.kml) - Google Earth's XML-based format</li>
+                <li><strong>KMZ files</strong> (.kmz) - Compressed KML files</li>
+                <li><strong>GeoJSON files</strong> (.geojson, .json) - Open standard format for geographic data</li>
+            </ul>
+            
+            <h3>Instructions</h3>
+            <ol>
+                <li><strong>Loading Files:</strong>
+                    <ul>
+                        <li>Drag and drop files into the designated area, or</li>
+                        <li>Click "Select Files" to use the file browser</li>
+                        <li>For shapefiles, make sure to select all related files (.shp, .dbf, .prj)</li>
+                    </ul>
+                </li>
+                <li><strong>Managing Layers:</strong>
+                    <ul>
+                        <li>Use the checkbox to toggle layer visibility</li>
+                        <li>Click the color picker to change layer style</li>
+                        <li>Click the × button to remove a layer</li>
+                    </ul>
+                </li>
+                <li><strong>Interacting with the Map:</strong>
+                    <ul>
+                        <li>Click on features to view their attribute data</li>
+                        <li>Use mouse wheel to zoom in/out</li>
+                        <li>Click and drag to pan the map</li>
+                    </ul>
+                </li>
+                <li><strong>Exporting Data:</strong>
+                    <ul>
+                        <li>Click "Export GeoJSON" to download all visible layers as a GeoJSON file</li>
+                    </ul>
+                </li>
+            </ol>
+            
+            <h3>Tips</h3>
+            <ul>
+                <li>This application runs entirely in your browser - no data is sent to any server</li>
+                <li>Large files may take a moment to process</li>
+                <li>For best results, use modern browsers like Chrome, Firefox, or Edge</li>
+            </ul>
+
+            <h3>Support</h3>
+                        <ol>Please reach out to me on my github ->  <a href="https://github.com/cpickett101" target="_blank" rel="noopener noreferrer">Christopher Pickett</a></ol>
+        </div>
+    </div>
+    
+    <!-- Include necessary libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-omnivore/0.3.4/leaflet-omnivore.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/shpjs/3.6.3/shp.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-ajax/2.1.0/leaflet.ajax.min.js"></script>
+    
+    <script>
+        // Initialize map
+        const map = L.map('map').setView([0, 0], 2);
+        
+        // Add OpenStreetMap tile layer
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+        
+        // Variables to store loaded layers
+        const loadedLayers = {};
+        let layerCount = 0;
+        
+        // DOM elements
+        const dropArea = document.getElementById('drop-area');
+        const fileInput = document.getElementById('file-input');
+        const fileSelectBtn = document.getElementById('file-select-btn');
+        const layersList = document.getElementById('layers-list');
+        const exportBtn = document.getElementById('export-btn');
+        const loadingIndicator = document.getElementById('loading-indicator');
+        const helpBtn = document.getElementById('help-btn');
+        const helpModal = document.getElementById('help-modal');
+        const closeModalBtn = document.querySelector('.close');
+        
+        // Event listeners for drag and drop
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropArea.addEventListener(eventName, preventDefaults, false);
+        });
+        
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropArea.addEventListener(eventName, highlight, false);
+        });
+        
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropArea.addEventListener(eventName, unhighlight, false);
+        });
+        
+        function highlight() {
+            dropArea.classList.add('highlight');
+        }
+        
+        function unhighlight() {
+            dropArea.classList.remove('highlight');
+        }
+        
+        // Handle dropped files
+        dropArea.addEventListener('drop', handleDrop, false);
+        
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            handleFiles(files);
+        }
+        
+        // Handle file selection via button
+        fileSelectBtn.addEventListener('click', () => {
+            fileInput.click();
+        });
+        
+        fileInput.addEventListener('change', () => {
+            handleFiles(fileInput.files);
+            // Reset the file input value to allow the same file to be uploaded again
+            fileInput.value = '';
+        });
+        
+        // Process uploaded files
+        function handleFiles(files) {
+            showLoading();
+            
+            // Group files by common name (for shapefiles with multiple extensions)
+            const fileGroups = groupFiles(files);
+            
+            // Process each group
+            Object.entries(fileGroups).forEach(([basename, fileList]) => {
+                const extension = getExtension(basename);
+                
+                if (extension === 'kmz') {
+                    processKMZFile(fileList[0], basename);
+                } else if (extension === 'kml') {
+                    processKMLFile(fileList[0], basename);
+                } else if (fileList.some(file => getExtension(file.name) === 'shp')) {
+                    processShapefiles(fileList, basename);
+                } else if (extension === 'zip') {
+                    processZippedShapefile(fileList[0], basename);
+                } else if (extension === 'geojson' || extension === 'json') {
+                    processGeoJSONFile(fileList[0], basename);
+                }
+            });
+        }
+        
+        // Group files by basename (for handling shapefile components)
+        function groupFiles(files) {
+            const groups = {};
+            
+            Array.from(files).forEach(file => {
+                const extension = getExtension(file.name);
+                let basename = file.name;
+                
+                // Handle shapefile components (.shp, .dbf, etc.)
+                if (['shp', 'dbf', 'prj', 'shx'].includes(extension)) {
+                    basename = file.name.substring(0, file.name.lastIndexOf('.'));
+                    if (!groups[basename]) {
+                        groups[basename] = [];
+                    }
+                    groups[basename].push(file);
+                } else {
+                    // Handle standalone files
+                    if (!groups[file.name]) {
+                        groups[file.name] = [];
+                    }
+                    groups[file.name].push(file);
+                }
+            });
+            
+            return groups;
+        }
+        
+        // Get file extension
+        function getExtension(filename) {
+            return filename.split('.').pop().toLowerCase();
+        }
+        
+        // Process KMZ file
+        function processKMZFile(file, layerName) {
+            const reader = new FileReader();
+            
+            reader.onload = function(e) {
+                const data = e.target.result;
+                
+                // Use JSZip to extract KML from KMZ
+                JSZip.loadAsync(data)
+                    .then(zip => {
+                        // Find KML file in the KMZ archive
+                        const kmlFile = Object.values(zip.files).find(zipEntry => 
+                            !zipEntry.dir && zipEntry.name.toLowerCase().endsWith('.kml')
+                        );
+                        
+                        if (!kmlFile) {
+                            console.error('No KML file found in KMZ');
+                            hideLoading();
+                            return;
+                        }
+                        
+                        // Extract KML content
+                        return kmlFile.async('string');
+                    })
+                    .then(kmlString => {
+                        if (!kmlString) return;
+                        
+                        // Parse KML
+                        const parser = new DOMParser();
+                        const kmlDoc = parser.parseFromString(kmlString, 'text/xml');
+                        
+                        // Use Leaflet-Omnivore to create a layer from KML
+                        const kmlLayer = omnivore.kml.parse(kmlString);
+                        
+                        // Add to map and store
+                        addLayerToMap(kmlLayer, layerName);
+                        hideLoading();
+                    })
+                    .catch(error => {
+                        console.error('Error processing KMZ file:', error);
+                        hideLoading();
+                    });
+            };
+            
+            reader.readAsArrayBuffer(file);
+        }
+        
+        // Process KML file
+        function processKMLFile(file, layerName) {
+            const reader = new FileReader();
+            
+            reader.onload = function(e) {
+                // Use Leaflet-Omnivore to create a layer from KML
+                const kmlLayer = omnivore.kml.parse(e.target.result);
+                
+                // Add to map and store
+                addLayerToMap(kmlLayer, layerName);
+                hideLoading();
+            };
+            
+            reader.readAsText(file);
+        }
+        
+        // Process GeoJSON file
+        function processGeoJSONFile(file, layerName) {
+            const reader = new FileReader();
+            
+            reader.onload = function(e) {
+                try {
+                    // Parse the GeoJSON data
+                    const geoJsonData = JSON.parse(e.target.result);
+                    
+                    // Validate that it's actually GeoJSON
+                    if (!geoJsonData.type || 
+                        !(geoJsonData.type === 'FeatureCollection' || 
+                          geoJsonData.type === 'Feature' || 
+                          ['Point', 'MultiPoint', 'LineString', 'MultiLineString', 
+                           'Polygon', 'MultiPolygon', 'GeometryCollection'].includes(geoJsonData.type))) {
+                        console.error('Invalid GeoJSON format');
+                        alert('The file does not appear to be valid GeoJSON.');
+                        hideLoading();
+                        return;
+                    }
+                    
+                    // Process the GeoJSON data
+                    processGeoJSON(geoJsonData, layerName);
+                } catch (error) {
+                    console.error('Error parsing GeoJSON:', error);
+                    alert('Error parsing GeoJSON file: ' + error.message);
+                    hideLoading();
+                }
+            };
+            
+            reader.readAsText(file);
+        }
+        
+        // Process Shapefile components
+        function processShapefiles(files, layerName) {
+            // Create a FormData object to store the shapefile components
+            const formData = new FormData();
+            
+            // Add all related files
+            files.forEach(file => {
+                formData.append(file.name, file);
+            });
+            
+            // Use shapefile.js to parse
+            const shpFile = files.find(file => getExtension(file.name) === 'shp');
+            const dbfFile = files.find(file => getExtension(file.name) === 'dbf');
+            
+            if (!shpFile) {
+                console.error('No .shp file found in uploaded files');
+                hideLoading();
+                return;
+            }
+            
+            const reader = new FileReader();
+            
+            reader.onload = function(e) {
+                // If we have a DBF file, read it as well
+                if (dbfFile) {
+                    const dbfReader = new FileReader();
+                    
+                    dbfReader.onload = function(dbfEvent) {
+                        // Use shp.js to parse the shapefile
+                        shp.combine([
+                            shp.parseShp(e.target.result),
+                            shp.parseDbf(dbfEvent.target.result)
+                        ]).then(geojson => {
+                            processGeoJSON(geojson, layerName);
+                        }).catch(error => {
+                            console.error('Error parsing shapefile:', error);
+                            hideLoading();
+                        });
+                    };
+                    
+                    dbfReader.readAsArrayBuffer(dbfFile);
+                } else {
+                    // Parse without DBF
+                    shp.parseShp(e.target.result).then(geojson => {
+                        processGeoJSON(geojson, layerName);
+                    }).catch(error => {
+                        console.error('Error parsing shapefile:', error);
+                        hideLoading();
+                    });
+                }
+            };
+            
+            reader.readAsArrayBuffer(shpFile);
+        }
+        
+        // Process zipped shapefile
+        function processZippedShapefile(file, layerName) {
+            const reader = new FileReader();
+            
+            reader.onload = function(e) {
+                const data = e.target.result;
+                
+                // Use shp.js to parse the zipped shapefile
+                shp(data).then(geojson => {
+                    processGeoJSON(geojson, layerName);
+                }).catch(error => {
+                    console.error('Error parsing zipped shapefile:', error);
+                    hideLoading();
+                });
+            };
+            
+            reader.readAsArrayBuffer(file);
+        }
+        
+        // Process GeoJSON data
+        function processGeoJSON(geojson, layerName) {
+            // Create a Leaflet GeoJSON layer
+            const layer = L.geoJSON(geojson, {
+                onEachFeature: function(feature, layer) {
+                    if (feature.properties) {
+                        // Create popup content from properties
+                        let popupContent = '<div class="popup-content">';
+                        
+                        for (const key in feature.properties) {
+                            popupContent += `<strong>${key}:</strong> ${feature.properties[key]}<br>`;
+                        }
+                        
+                        popupContent += '</div>';
+                        layer.bindPopup(popupContent);
+                    }
+                }
+            });
+            
+            // Add to map and store
+            addLayerToMap(layer, layerName);
+            hideLoading();
+        }
+        
+        // Add layer to map and UI
+        function addLayerToMap(layer, name) {
+            const id = 'layer-' + layerCount++;
+            const displayName = name.length > 25 ? name.substring(0, 22) + '...' : name;
+            
+            // Store the layer
+            loadedLayers[id] = {
+                layer: layer,
+                name: name,
+                visible: true,
+                color: getRandomColor()
+            };
+            
+            // Apply random color to the layer
+            applyLayerStyle(id, loadedLayers[id].color);
+            
+            // Add to map
+            map.addLayer(layer);
+            
+            // Zoom to fit the layer bounds
+            try {
+                const bounds = layer.getBounds();
+                if (bounds.isValid()) {
+                    map.fitBounds(bounds);
+                }
+            } catch (e) {
+                console.warn('Could not zoom to layer bounds:', e);
+            }
+            
+            // Create UI control for the layer
+            const layerItem = document.createElement('div');
+            layerItem.className = 'layer-item';
+            layerItem.innerHTML = `
+                <div>
+                    <input type="checkbox" id="toggle-${id}" checked>
+                    <label for="toggle-${id}">${displayName}</label>
+                </div>
+                <div>
+                    <input type="color" value="${loadedLayers[id].color}" class="color-picker" id="color-${id}">
+                    <button class="remove-btn" data-id="${id}">×</button>
+                </div>
+            `;
+            
+            // Add event listeners for layer controls
+            layerItem.querySelector(`#toggle-${id}`).addEventListener('change', function(e) {
+                toggleLayerVisibility(id, e.target.checked);
+            });
+            
+            layerItem.querySelector(`#color-${id}`).addEventListener('change', function(e) {
+                applyLayerStyle(id, e.target.value);
+            });
+            
+            layerItem.querySelector('.remove-btn').addEventListener('click', function() {
+                removeLayer(id);
+                layerItem.remove();
+            });
+            
+            // Add to layers list
+            layersList.appendChild(layerItem);
+        }
+        
+        // Toggle layer visibility
+        function toggleLayerVisibility(id, visible) {
+            if (loadedLayers[id]) {
+                if (visible) {
+                    map.addLayer(loadedLayers[id].layer);
+                } else {
+                    map.removeLayer(loadedLayers[id].layer);
+                }
+                loadedLayers[id].visible = visible;
+            }
+        }
+        
+        // Apply color style to layer
+        function applyLayerStyle(id, color) {
+            if (loadedLayers[id]) {
+                loadedLayers[id].color = color;
+                
+                const layer = loadedLayers[id].layer;
+                
+                // Style the layer based on its type
+                layer.setStyle(function(feature) {
+                    return {
+                        color: color,
+                        fillColor: color,
+                        fillOpacity: 0.3,
+                        weight: 2
+                    };
+                });
+            }
+        }
+        
+        // Remove layer
+        function removeLayer(id) {
+            if (loadedLayers[id]) {
+                map.removeLayer(loadedLayers[id].layer);
+                delete loadedLayers[id];
+            }
+        }
+        
+        // Export visible layers as GeoJSON
+        exportBtn.addEventListener('click', function() {
+            const exportData = {
+                type: 'FeatureCollection',
+                features: []
+            };
+            
+            // Collect features from all visible layers
+            Object.entries(loadedLayers).forEach(([id, layerInfo]) => {
+                if (layerInfo.visible) {
+                    const layer = layerInfo.layer;
+                    
+                    // Extract GeoJSON features
+                    layer.eachLayer(function(featureLayer) {
+                        if (featureLayer.feature) {
+                            exportData.features.push(featureLayer.feature);
+                        }
+                    });
+                }
+            });
+            
+            // Convert to JSON string
+            const dataStr = JSON.stringify(exportData, null, 2);
+            
+            // Create and trigger download
+            const blob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = 'exported_geojson.json';
+            document.body.appendChild(a);
+            a.click();
+            
+            // Clean up
+            setTimeout(function() {
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+            }, 100);
+        });
+        
+        // Helper functions
+        function getRandomColor() {
+            const letters = '0123456789ABCDEF';
+            let color = '#';
+            for (let i = 0; i < 6; i++) {
+                color += letters[Math.floor(Math.random() * 16)];
+            }
+            return color;
+        }
+        
+        function showLoading() {
+            loadingIndicator.style.display = 'block';
+        }
+        
+        function hideLoading() {
+            loadingIndicator.style.display = 'none';
+        }
+        
+        // Help modal functionality
+        helpBtn.addEventListener('click', function() {
+            helpModal.style.display = 'block';
+        });
+        
+        closeModalBtn.addEventListener('click', function() {
+            helpModal.style.display = 'none';
+        });
+        
+        window.addEventListener('click', function(event) {
+            if (event.target === helpModal) {
+                helpModal.style.display = 'none';
+            }
+        });
+        
+        // Add keyboard shortcut for help (F1 or Alt+H)
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'F1' || (event.altKey && event.key === 'h')) {
+                event.preventDefault();
+                helpModal.style.display = helpModal.style.display === 'block' ? 'none' : 'block';
+            }
+            
+            // Escape key to close modal
+            if (event.key === 'Escape' && helpModal.style.display === 'block') {
+                helpModal.style.display = 'none';
+            }
+        });
+        
+        // Add welcome message on first load
+        if (!localStorage.getItem('geospatialViewerVisited')) {
+            setTimeout(function() {
+                helpModal.style.display = 'block';
+                localStorage.setItem('geospatialViewerVisited', 'true');
+            }, 1000);
+        }
+    </script>
+</body>
+</html>
