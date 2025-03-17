@@ -13,11 +13,7 @@ A lightweight, browser-based application for viewing and interacting with common
 - **Export Capabilities**: Export visible layers as GeoJSON
 - **Fully Client-Side**: All processing happens in your browser - no data is sent to any server
 - **Responsive Design**: Works on desktop and mobile devices
-
-## Demo
-
-Try it out: [Live Demo](#) (Replace with your hosted version URL)
-
+  
 ## Usage
 
 ### Supported File Types
